@@ -1,74 +1,83 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const axios = require('axios');
 
-// ================= CONFIGURACIÓN (EDITA ESTO) =================
-const TOKEN = process.env.DISCORD_TOKEN;
+// ================= CONFIGURACIÓN =================
+// IMPORTANTE: El token lo toma de las variables de Render/Square Cloud
+const TOKEN = process.env.DISCORD_TOKEN; 
+
 const CANAL_ID = '1452792758069624934'; 
-const USUARIO_TIKTOK = 'solokaosmx'; // Ej: ibai, auronplay
-const MENSAJE = '@everyone 🚨 ¡CORRE! **NOMBRE** está en DIRECTO en TikTok. \nEntra ya: LINK';
-// ==============================================================
+
+// AQUI PON TU LISTA DE USUARIOS (Entre comillas y separados por coma)
+const USUARIOS_TIKTOK = [
+    'macergon',
+    'solokaosmx',
+    'erosfutw' 
+];
+
+const MENSAJE = '@everyone 🚨 ¡CORRAAAAAN! **NOMBRE** está en DIRECTO en estos momentos por TikTok. \nEntra ya: LINK';
+// =================================================
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// Variable para recordar si ya avisamos (para no spamear)
-let enDirecto = false;
+// MEMORIA: Aquí guardaremos el estado de cada usuario para no repetir avisos
+let estadosLive = {}; 
+
+// Inicializamos la memoria en falso para todos
+USUARIOS_TIKTOK.forEach(usuario => {
+    estadosLive[usuario] = false;
+});
 
 async function checkTikTokLive() {
-    try {
-        console.log(`🔎 Revisando estado de ${USUARIO_TIKTOK}...`);
-        
-        // Usamos una URL especial de TikTok que a veces devuelve datos JSON
-        // Nota: TikTok cambia esto a menudo, usamos un User-Agent para parecer un navegador real
-        const url = `https://www.tiktok.com/@${USUARIO_TIKTOK}/live`;
-        const response = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            }
-        });
-
-        const html = response.data;
-
-        // Buscamos pistas en el código de la página que indiquen "LIVE"
-        // "room_id" suele aparecer cuando hay una sala activa o status:2
-        // El método más fiable casero es buscar la etiqueta de estado en los metadatos
-        const isLive = html.includes('"status":2') || html.includes('room_id'); 
-
-        if (isLive && !enDirecto) {
-            // Si está en vivo y NO habíamos avisado antes
-            enDirecto = true;
-            const channel = await client.channels.fetch(CANAL_ID);
+    // Recorremos la lista de usuarios uno por uno
+    for (const usuario of USUARIOS_TIKTOK) {
+        try {
+            console.log(`🔎 Revisando a ${usuario}...`);
             
-            // Reemplazamos las palabras clave del mensaje
-            const mensajeFinal = MENSAJE
-                .replace('NOMBRE', USUARIO_TIKTOK)
-                .replace('LINK', `https://www.tiktok.com/@${USUARIO_TIKTOK}/live`);
+            const url = `https://www.tiktok.com/@${usuario}/live`;
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                }
+            });
 
-            channel.send(mensajeFinal);
-            console.log('✅ Notificación enviada.');
+            const html = response.data;
+            const isLive = html.includes('"status":2') || html.includes('room_id'); 
 
-        } else if (!isLive && enDirecto) {
-            // Si ya no está en vivo, reseteamos para el próximo directo
-            enDirecto = false;
-            console.log('⏹ El directo ha terminado.');
-        } else {
-            console.log('💤 No está en directo (o sin cambios).');
+            // LÓGICA DE NOTIFICACIÓN
+            if (isLive && !estadosLive[usuario]) {
+                // Si está en vivo y NO habíamos avisado
+                estadosLive[usuario] = true; // Marcamos como avisado
+                
+                const channel = await client.channels.fetch(CANAL_ID);
+                const mensajeFinal = MENSAJE
+                    .replace('NOMBRE', usuario)
+                    .replace('LINK', `https://www.tiktok.com/@${usuario}/live`);
+
+                channel.send(mensajeFinal);
+                console.log(`✅ Notificación enviada para ${usuario}.`);
+
+            } else if (!isLive && estadosLive[usuario]) {
+                // Si ya se apagó el directo
+                estadosLive[usuario] = false; // Reseteamos para la próxima
+                console.log(`⏹ El directo de ${usuario} terminó.`);
+            }
+
+        } catch (error) {
+            console.error(`❌ Error al revisar a ${usuario}:`, error.message);
         }
-
-    } catch (error) {
-        console.error('❌ Error al consultar TikTok (Posible bloqueo temporal):', error.message);
+        
+        // Esperamos 2 segundos entre cada usuario para que TikTok no bloquee al bot
+        await new Promise(r => setTimeout(r, 2000));
     }
 }
 
 client.once('ready', () => {
     console.log(`🤖 Bot conectado como ${client.user.tag}`);
-    
-    // Revisar cada 5 minutos (300,000 ms)
-    // NO bajes mucho este tiempo o TikTok bloqueará tu IP
-    checkTikTokLive(); // Revisar al iniciar
-    setInterval(checkTikTokLive, 300000); 
+    checkTikTokLive(); 
+    setInterval(checkTikTokLive, 300000); // Revisa cada 5 minutos
 });
 
 client.login(TOKEN);
