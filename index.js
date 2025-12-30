@@ -1,40 +1,44 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const axios = require('axios');
+const express = require('express'); // Necesario para Render
 
-// ================= CONFIGURACIÓN =================
-// IMPORTANTE: El token lo toma de las variables de Render/Square Cloud
+// ================= SERVIDOR WEB (Para que Render no se apague) =================
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('¡El bot está vivo y vigilando TikTok!');
+});
+
+app.listen(port, () => {
+    console.log(`🔗 Servidor web falso listo en el puerto ${port}`);
+});
+// ============================================================================
+
 const TOKEN = process.env.DISCORD_TOKEN; 
+const CANAL_ID = 'TU_ID_DE_CANAL_AQUÍ'; // <--- ¡NO OLVIDES PONER TU ID DE CANAL!
 
-const CANAL_ID = '1452792758069624934'; 
-
-// AQUI PON TU LISTA DE USUARIOS (Entre comillas y separados por coma)
+// TUS USUARIOS A VIGILAR
 const USUARIOS_TIKTOK = [
     'macergon',
     'solokaosmx',
     'erosfutw' 
 ];
 
-const MENSAJE = '@everyone 🚨 ¡CORRAAAAAN! **NOMBRE** está en DIRECTO en estos momentos por TikTok. \nEntra ya: LINK';
-// =================================================
+const MENSAJE = '@everyone 🚨 ¡CORRE! **NOMBRE** está en DIRECTO en TikTok. \nEntra ya: LINK';
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// MEMORIA: Aquí guardaremos el estado de cada usuario para no repetir avisos
 let estadosLive = {}; 
 
-// Inicializamos la memoria en falso para todos
-USUARIOS_TIKTOK.forEach(usuario => {
-    estadosLive[usuario] = false;
-});
+USUARIOS_TIKTOK.forEach(usuario => { estadosLive[usuario] = false; });
 
 async function checkTikTokLive() {
-    // Recorremos la lista de usuarios uno por uno
     for (const usuario of USUARIOS_TIKTOK) {
         try {
             console.log(`🔎 Revisando a ${usuario}...`);
-            
             const url = `https://www.tiktok.com/@${usuario}/live`;
             const response = await axios.get(url, {
                 headers: {
@@ -46,30 +50,19 @@ async function checkTikTokLive() {
             const html = response.data;
             const isLive = html.includes('"status":2') || html.includes('room_id'); 
 
-            // LÓGICA DE NOTIFICACIÓN
             if (isLive && !estadosLive[usuario]) {
-                // Si está en vivo y NO habíamos avisado
-                estadosLive[usuario] = true; // Marcamos como avisado
-                
+                estadosLive[usuario] = true;
                 const channel = await client.channels.fetch(CANAL_ID);
                 const mensajeFinal = MENSAJE
                     .replace('NOMBRE', usuario)
                     .replace('LINK', `https://www.tiktok.com/@${usuario}/live`);
-
                 channel.send(mensajeFinal);
-                console.log(`✅ Notificación enviada para ${usuario}.`);
-
             } else if (!isLive && estadosLive[usuario]) {
-                // Si ya se apagó el directo
-                estadosLive[usuario] = false; // Reseteamos para la próxima
-                console.log(`⏹ El directo de ${usuario} terminó.`);
+                estadosLive[usuario] = false;
             }
-
         } catch (error) {
-            console.error(`❌ Error al revisar a ${usuario}:`, error.message);
+            console.error(`❌ Error con ${usuario}`);
         }
-        
-        // Esperamos 2 segundos entre cada usuario para que TikTok no bloquee al bot
         await new Promise(r => setTimeout(r, 2000));
     }
 }
@@ -77,7 +70,7 @@ async function checkTikTokLive() {
 client.once('ready', () => {
     console.log(`🤖 Bot conectado como ${client.user.tag}`);
     checkTikTokLive(); 
-    setInterval(checkTikTokLive, 300000); // Revisa cada 5 minutos
+    setInterval(checkTikTokLive, 300000); 
 });
 
 client.login(TOKEN);
