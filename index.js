@@ -16,7 +16,7 @@ app.listen(port, () => {
 // ============================================================================
 
 const TOKEN = process.env.DISCORD_TOKEN; 
-const CANAL_ID = 'TU_ID_DE_CANAL_AQUÍ'; // <--- ¡NO OLVIDES PONER TU ID DE CANAL!
+const CANAL_ID = '1452792758069624934'; // <--- ¡NO OLVIDES PONER TU ID DE CANAL!
 
 // TUS USUARIOS A VIGILAR
 const USUARIOS_TIKTOK = [
@@ -67,8 +67,13 @@ async function checkTikTokLive() {
     }
 }
 
-client.once('ready', () => {
+client.once('ready', async () => {  // <--- Añade 'async' aquí
     console.log(`🤖 Bot conectado como ${client.user.tag}`);
+    
+    // PRUEBA DE MENSAJE (Borra esto cuando funcione)
+    const canal = await client.channels.fetch(CANAL_ID);
+    canal.send("¡Hola! Soy el bot y estoy funcionando correctamente ✅");
+
     checkTikTokLive(); 
     setInterval(checkTikTokLive, 300000); 
 });
